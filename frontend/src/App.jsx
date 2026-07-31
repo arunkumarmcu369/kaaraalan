@@ -1,0 +1,68 @@
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { AuthProvider } from './context/AuthContext'
+import { useAuth } from './hooks/useAuth'
+import { ProtectedRoute, RoleBasedRoute } from './routes/ProtectedRoute'
+import AuthLayout from './components/layout/AuthLayout'
+import DashboardLayout from './components/layout/DashboardLayout'
+import Login from './pages/auth/Login'
+import DashboardHome from './pages/DashboardHome'
+import AdminOrders from './pages/admin/Orders'
+import AdminProducts from './pages/admin/Products'
+import AdminDealers from './pages/admin/Dealers'
+import AdminStocks from './pages/admin/Stocks'
+import AdminPrices from './pages/admin/Prices'
+import AdminBatchRequired from './pages/admin/BatchRequired'
+import DealerStock from './pages/dealer/Stock'
+import DealerCart from './pages/dealer/Cart'
+import DealerOrderHistory from './pages/dealer/OrderHistory'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, refetchOnWindowFocus: false },
+  },
+})
+
+function OrdersPage() {
+  const { isAdmin } = useAuth()
+  return isAdmin ? <AdminOrders /> : <DealerOrderHistory />
+}
+
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route element={<AuthLayout />}>
+              <Route path="/login" element={<Login />} />
+            </Route>
+
+            <Route element={<ProtectedRoute />}>
+              <Route element={<DashboardLayout />}>
+                <Route path="/dashboard" element={<DashboardHome />} />
+                <Route path="/dashboard/orders" element={<OrdersPage />} />
+
+                <Route element={<RoleBasedRoute role="admin" />}>
+                  <Route path="/dashboard/products" element={<AdminProducts />} />
+                  <Route path="/dashboard/dealers" element={<AdminDealers />} />
+                  <Route path="/dashboard/stocks" element={<AdminStocks />} />
+                  <Route path="/dashboard/prices" element={<AdminPrices />} />
+                  <Route path="/dashboard/batch-required" element={<AdminBatchRequired />} />
+                </Route>
+
+                <Route element={<RoleBasedRoute role="dealer" />}>
+                  <Route path="/dashboard/stock" element={<DealerStock />} />
+                  <Route path="/dashboard/cart" element={<DealerCart />} />
+                </Route>
+              </Route>
+            </Route>
+
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </QueryClientProvider>
+  )
+}

@@ -1,0 +1,90 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+@import "./styles/glass.css";
+
+@theme {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --color-brand-50: #eef9f4;
+  --color-brand-100: #d5f0e4;
+  --color-brand-200: #aee0cb;
+  --color-brand-300: #7ac9ab;
+  --color-brand-400: #47ab88;
+  --color-brand-500: #2d8f6f;
+  --color-brand-600: #21735a;
+  --color-brand-700: #1c5c4a;
+  --color-brand-800: #184a3c;
+  --color-brand-900: #143d33;
+  --color-ink: #14231e;
+  --color-muted: #5c6f67;
+  --color-surface: #f3f7f5;
+  --color-accent: #c45c26;
+  --color-warn: #b45309;
+  --color-danger: #b91c1c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background:
+    radial-gradient(ellipse 80% 50% at 10% -10%, #d5f0e4 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 100% 0%, #fde8d8 0%, transparent 45%),
+    linear-gradient(180deg, #f7faf8 0%, #eef3f0 100%);
+  background-attachment: fixed;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #aee0cb;
+  border-radius: 999px;
+}
+
+/* Date inputs: keep selected value readable in light/dark UI contexts */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"],
+.date-input {
+  color: #14231e !important;
+  color-scheme: light;
+  -webkit-text-fill-color: #14231e;
+}
+
+input[type="date"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="date"]::-webkit-datetime-edit-text,
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field {
+  color: #14231e;
+  -webkit-text-fill-color: #14231e;
+}
+
+input[type="date"]:focus {
+  color: #14231e !important;
+  -webkit-text-fill-color: #14231e;
+}
+
+input[type="date"]:disabled {
+  color: #64748b !important;
+  -webkit-text-fill-color: #64748b;
+}
+
+@media (prefers-color-scheme: dark) {
+  input[type="date"],
+  .date-input {
+    color: #14231e !important;
+    -webkit-text-fill-color: #14231e;
+    background-color: #ffffff;
+  }
+}

@@ -103,3 +103,9 @@ backend/    FastAPI app + alembic migrations
 ```bash
 curl http://localhost:8000/health
 ```
+
+## Production deploy
+
+Frontend → **Hostinger** (`https://kaaraalan.in`), backend + Postgres → **Railway** (`https://api.kaaraalan.in`).
+
+See **[DEPLOY.md](./DEPLOY.md)** for DNS subdomain steps, Railway variables, and Hostinger upload.

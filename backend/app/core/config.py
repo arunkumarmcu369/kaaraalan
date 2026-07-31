@@ -1,5 +1,16 @@
 from functools import lru_cache
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _normalize_database_url(url: str) -> str:
+    """Railway/Postgres often provide postgresql://; SQLAlchemy async needs +asyncpg."""
+    if url.startswith("postgres://"):
+        return "postgresql+asyncpg://" + url.removeprefix("postgres://")
+    if url.startswith("postgresql://"):
+        return "postgresql+asyncpg://" + url.removeprefix("postgresql://")
+    return url
 
 
 class Settings(BaseSettings):
@@ -12,13 +23,22 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     IDLE_SESSION_TIMEOUT_MINUTES: int = 60
     COOKIE_SECURE: bool = False
-    COOKIE_DOMAIN: str = "localhost"
+    # Empty = host-only cookie (recommended for api.kaaraalan.in).
+    # Production alternative: .kaaraalan.in (shared across subdomains).
+    COOKIE_DOMAIN: str = ""
     FRONTEND_ORIGIN: str = "http://localhost:5173"
     ADMIN_SEED_USERNAME: str = "admin"
     ADMIN_SEED_PASSWORD: str = "admin"
 
     ACCESS_COOKIE_NAME: str = "access_token"
     REFRESH_COOKIE_NAME: str = "refresh_token"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def normalize_db_url(cls, value: str) -> str:
+        if not value:
+            return value
+        return _normalize_database_url(str(value))
 
 
 @lru_cache

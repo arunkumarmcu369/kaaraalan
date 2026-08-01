@@ -93,7 +93,37 @@ VITE_WS_BASE_URL=wss://api.kaaraalan.in/api/v1/ws
 VITE_IDLE_TIMEOUT_MINUTES=60
 ```
 
-### Build locally
+### Automated deploy (GitHub Actions)
+
+On every push to `main`, [`.github/workflows/deploy-frontend.yml`](./.github/workflows/deploy-frontend.yml):
+
+1. Installs frontend dependencies (`npm ci`)
+2. Runs `npm run build`
+3. Uploads `frontend/dist/` contents to Hostinger via FTP/FTPS
+4. Syncs/overwrites files in `public_html`
+
+Backend is unchanged — Railway still auto-deploys the API from GitHub separately.
+
+#### GitHub Secrets to add
+
+Repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**:
+
+| Secret | Example / typical value | Where to get it |
+|--------|-------------------------|-----------------|
+| `FTP_SERVER` | `ftp.kaaraalan.in` or Hostinger hostname | Hostinger hPanel → **Websites** → your site → **Files** → **FTP Accounts** (or **Hosting** → **FTP**). Use the **FTP hostname** (often `ftp.yourdomain.com` or `ftp.hostinger.com`). |
+| `FTP_USERNAME` | full FTP username | Same FTP Accounts page — create or copy the FTP user (often looks like `u123456789` or `u123456789.kaaraalan.in`). |
+| `FTP_PASSWORD` | FTP password | Same page — set/reset the FTP account password. Prefer a dedicated FTP user limited to this site. |
+| `FTP_SERVER_DIR` | `./` or `public_html/` | Path **relative to the FTP user’s home**, with a trailing slash. If the FTP account already lands inside `public_html`, use `./`. If the home is the hosting root, use `public_html/`. Confirm in File Manager / FTP client by seeing where you land after login. |
+
+The workflow uses **FTPS on port 21** by default (see `.github/workflows/deploy-frontend.yml`). If deploy fails on TLS, edit the workflow: set `protocol: ftp` (still port `21`). This is FTP/FTPS, not Hostinger SFTP (often port `65002`).
+
+**Notes**
+
+- Never commit FTP passwords; secrets only.
+- First run may take longer while the action builds a sync state file (`.ftp-deploy-sync-state.json`) on the server.
+- `dangerous-clean-slate` is off; the action still syncs so remote files that are no longer in `dist` get removed over time as part of normal sync — treat `public_html` as owned by this app.
+- To verify: **Actions** tab after a push to `main`, then open `https://kaaraalan.in/login`.
+### Manual build (optional)
 
 ```bash
 cd frontend
@@ -101,7 +131,7 @@ npm install
 npm run build
 ```
 
-### Upload
+### Manual upload (optional)
 
 1. Hostinger → **File Manager** → open `public_html` (or the folder for `kaaraalan.in`)
 2. Upload **contents** of `frontend/dist/` (including `.htaccess`)

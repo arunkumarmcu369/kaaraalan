@@ -106,6 +106,7 @@ curl http://localhost:8000/health
 
 ## Production deploy
 
-Frontend → **Hostinger** (`https://kaaraalan.in`), backend + Postgres → **Railway** (`https://api.kaaraalan.in`).
+Frontend → **Hostinger** (`https://kaaraalan.in`) via GitHub Actions FTP on push to `main`.  
+Backend + Postgres → **Railway** (`https://api.kaaraalan.in`).
 
-See **[DEPLOY.md](./DEPLOY.md)** for DNS subdomain steps, Railway variables, and Hostinger upload.
+See **[DEPLOY.md](./DEPLOY.md)** for DNS, Railway variables, Hostinger FTP secrets, and the frontend workflow.

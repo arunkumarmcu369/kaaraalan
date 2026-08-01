@@ -145,7 +145,7 @@ FLAVOUR_ORDER = [
     "Paneer",
     "Lemon",
     "Orange",
-    "Blueberry",
+    "BlueBerry",
     "Ginger",
     "Nannari",
     "Grape",

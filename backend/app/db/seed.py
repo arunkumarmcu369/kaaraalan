@@ -23,12 +23,23 @@ FLAVOURS = [
     "Paneer",
     "Lemon",
     "Orange",
-    "Blue Berry",
+    "BlueBerry",
     "Ginger",
     "Nannari",
     "Grape",
-    "Pine Apple",
+    "Pineapple",
 ]
+
+# Legacy spellings so existing DB rows are renamed instead of duplicated.
+_FLAVOUR_LOOKUP = {
+    "blueberry": ["blueberry", "blue berry", "blue-berry"],
+    "pineapple": ["pineapple", "pine apple", "pine-apple"],
+}
+
+
+def _flavour_lookup_keys(flavour: str) -> list[str]:
+    key = " ".join(flavour.strip().lower().replace("_", " ").replace("-", " ").split())
+    return _FLAVOUR_LOOKUP.get(key, [key])
 
 # (bottle_type, volume_liters, default_price, default_stock)
 VARIANT_SPECS = [
@@ -86,7 +97,7 @@ async def seed_flavours(db: AsyncSession) -> None:
         result = await db.execute(
             select(Product)
             .options(selectinload(Product.variants).selectinload(ProductVariant.stock))
-            .where(func.lower(Product.flavour_name) == flavour.lower())
+            .where(func.lower(Product.flavour_name).in_(_flavour_lookup_keys(flavour)))
             .order_by(Product.created_at)
         )
         products = list(result.scalars().unique().all())

@@ -8,7 +8,6 @@ const adminLinks = [
   { to: '/dashboard/products', label: 'Products' },
   { to: '/dashboard/dealers', label: 'Dealers' },
   { to: '/dashboard/stocks', label: 'Stocks' },
-  { to: '/dashboard/prices', label: 'Prices' },
 ]
 
 const dealerLinks = [

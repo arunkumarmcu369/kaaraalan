@@ -3,7 +3,7 @@ export const FLAVOURS = [
   'Paneer',
   'Lemon',
   'Orange',
-  'Blueberry',
+  'BlueBerry',
   'Ginger',
   'Nannari',
   'Grape',
@@ -19,6 +19,7 @@ const ALIASES = {
   panner: 'paneer',
   'blue berry': 'blueberry',
   'blue-berry': 'blueberry',
+  blueberry: 'blueberry',
   'pine apple': 'pineapple',
   'pine-apple': 'pineapple',
 }

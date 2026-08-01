@@ -128,7 +128,6 @@ export default function AdminProducts() {
         label: 'Price',
         render: (r) => `₹${Number(r.price).toFixed(2)}`,
       },
-      { key: 'stock', label: 'Stock' },
       {
         key: 'actions',
         label: 'Actions',

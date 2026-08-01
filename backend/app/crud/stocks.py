@@ -17,7 +17,7 @@ CANONICAL_FLAVOURS = [
     "Paneer",
     "Lemon",
     "Orange",
-    "Blueberry",
+    "BlueBerry",
     "Ginger",
     "Nannari",
     "Grape",

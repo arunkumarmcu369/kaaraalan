@@ -44,7 +44,7 @@ export default function AdminDashboard() {
     <div>
       <PageHeader
         title="Dashboard"
-        subtitle="Live distribution pulse for Kaaralan Goli Soda"
+        subtitle="Simplifying Goli Soda operations every day."
         actions={
           <div className="flex flex-wrap items-end gap-2">
             <Select

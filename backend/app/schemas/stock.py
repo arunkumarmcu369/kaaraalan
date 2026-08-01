@@ -41,7 +41,6 @@ class DealerStockVariant(BaseModel):
     size_label: Optional[str] = None
     sku: str
     price: Decimal
-    quantity_available: int
     flavour_name: Optional[str] = None
     name: Optional[str] = None
 
@@ -96,7 +95,22 @@ class StockUpdateLogOut(BaseModel):
     new_glass_total: int
     new_pet_300_total: int
     new_pet_220_total: int
+    glass_change: int = 0
+    pet_300_change: int = 0
+    pet_220_change: int = 0
     updated_by: str
+    source: str = "admin"
+    note: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class LowStockItemOut(BaseModel):
+    product_variant_id: UUID
+    flavour: str
+    bottle_type: str
+    size_label: str
+    current_stock: int
+    threshold: int
+    short_by: int

@@ -7,8 +7,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.order import OrderItem
 from app.models.product import Product, ProductVariant
-from app.models.stock import Stock
+from app.models.stock import Stock, StockMovement
 from app.schemas.product import CatalogProductCreate, CatalogProductUpdate
 from app.services.helpers import generate_sku, paginate
 
@@ -54,8 +55,9 @@ def catalog_item_from_variant(variant: ProductVariant) -> dict:
         "size_label": _size_label(product_type, size_ml),
         "price": variant.price,
         "stock": variant.stock.quantity_available if variant.stock else 0,
+        "reorder_level": variant.stock.reorder_level if variant.stock else 0,
         "sku": variant.sku,
-        "is_active": variant.is_active and (variant.product.is_active if variant.product else True),
+        "is_active": bool(variant.is_active),
         "created_at": variant.created_at,
     }
 
@@ -77,6 +79,21 @@ def variant_to_out(variant: ProductVariant) -> dict:
         "size_ml": item["size_ml"],
         "size_label": item["size_label"],
     }
+
+
+async def _sync_product_active_flag(db: AsyncSession, product: Product | None) -> None:
+    """Product stays active if any variant is still active."""
+    if not product:
+        return
+    active_count = await db.scalar(
+        select(func.count())
+        .select_from(ProductVariant)
+        .where(
+            ProductVariant.product_id == product.id,
+            ProductVariant.is_active.is_(True),
+        )
+    )
+    product.is_active = (active_count or 0) > 0
 
 
 async def list_catalog(
@@ -149,6 +166,24 @@ async def create_catalog_product(db: AsyncSession, data: CatalogProductCreate) -
     )
     existing = existing_q.scalar_one_or_none()
     if existing:
+        if not existing.is_active:
+            existing.is_active = True
+            existing.price = data.price
+            if existing.stock:
+                existing.stock.quantity_available = data.stock
+                existing.stock.reorder_level = int(getattr(data, "reorder_level", 10) or 10)
+            else:
+                db.add(
+                    Stock(
+                        id=uuid4(),
+                        product_variant_id=existing.id,
+                        quantity_available=data.stock,
+                        reorder_level=int(getattr(data, "reorder_level", 10) or 10),
+                    )
+                )
+            product.is_active = True
+            await db.flush()
+            return await get_catalog_item(db, existing.id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
@@ -174,7 +209,7 @@ async def create_catalog_product(db: AsyncSession, data: CatalogProductCreate) -
         id=uuid4(),
         product_variant_id=variant.id,
         quantity_available=data.stock,
-        reorder_level=10,
+        reorder_level=int(getattr(data, "reorder_level", 10) or 10),
     )
     db.add(stock)
     await db.flush()
@@ -219,27 +254,97 @@ async def update_catalog_product(db: AsyncSession, variant_id: UUID, data: Catal
     if "price" in payload:
         variant.price = payload["price"]
     if "is_active" in payload:
-        variant.is_active = payload["is_active"]
-        if variant.product:
-            variant.product.is_active = payload["is_active"]
+        variant.is_active = bool(payload["is_active"])
+        await db.flush()
+        if payload["is_active"] and variant.product:
+            variant.product.is_active = True
+        else:
+            await _sync_product_active_flag(db, variant.product)
     if "stock" in payload:
         if not variant.stock:
             variant.stock = Stock(
                 id=uuid4(),
                 product_variant_id=variant.id,
                 quantity_available=payload["stock"],
-                reorder_level=10,
+                reorder_level=payload.get("reorder_level", 10) or 10,
             )
             db.add(variant.stock)
         else:
             variant.stock.quantity_available = payload["stock"]
+
+    if "reorder_level" in payload:
+        level = int(payload["reorder_level"] or 0)
+        if not variant.stock:
+            variant.stock = Stock(
+                id=uuid4(),
+                product_variant_id=variant.id,
+                quantity_available=payload.get("stock", 0) or 0,
+                reorder_level=level,
+            )
+            db.add(variant.stock)
+        else:
+            variant.stock.reorder_level = level
 
     await db.flush()
     return await get_catalog_item(db, variant_id)
 
 
 async def soft_delete_catalog_product(db: AsyncSession, variant_id: UUID) -> dict:
-    return await update_catalog_product(db, variant_id, CatalogProductUpdate(is_active=False))
+    """Deactivate a catalog product (variant). Reversible; excluded from ordering/stock views."""
+    variant = await get_variant(db, variant_id)
+    variant.is_active = False
+    await db.flush()
+    await _sync_product_active_flag(db, variant.product)
+    await db.flush()
+    return await get_catalog_item(db, variant_id)
+
+
+async def reactivate_catalog_product(db: AsyncSession, variant_id: UUID) -> dict:
+    """Reactivate a previously deactivated catalog product."""
+    return await update_catalog_product(db, variant_id, CatalogProductUpdate(is_active=True))
+
+
+HISTORICAL_DELETE_MSG = (
+    "This product has historical records and cannot be deleted. Please deactivate it instead."
+)
+
+
+async def hard_delete_catalog_product(db: AsyncSession, variant_id: UUID) -> dict:
+    """Permanently delete a variant when it has no order/stock-history references."""
+    variant = await get_variant(db, variant_id)
+    product = variant.product
+    product_id = variant.product_id
+    snapshot = catalog_item_from_variant(variant)
+
+    order_refs = await db.scalar(
+        select(func.count()).select_from(OrderItem).where(OrderItem.product_variant_id == variant_id)
+    )
+    movement_refs = await db.scalar(
+        select(func.count())
+        .select_from(StockMovement)
+        .where(StockMovement.product_variant_id == variant_id)
+    )
+    if (order_refs or 0) > 0 or (movement_refs or 0) > 0:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=HISTORICAL_DELETE_MSG)
+
+    if variant.stock:
+        await db.delete(variant.stock)
+        await db.flush()
+
+    await db.delete(variant)
+    await db.flush()
+
+    remaining = await db.scalar(
+        select(func.count()).select_from(ProductVariant).where(ProductVariant.product_id == product_id)
+    )
+    if product and (remaining or 0) == 0:
+        await db.delete(product)
+        await db.flush()
+    elif product:
+        await _sync_product_active_flag(db, product)
+        await db.flush()
+
+    return snapshot
 
 
 # Back-compat helpers used by stocks/orders display

@@ -25,6 +25,12 @@ async def list_products(
     if user.role == "dealer":
         active_only = True
     items, meta = await crud.list_catalog(db, page, page_size, active_only, product_type)
+    if user.role == "dealer":
+        # Dealers must never receive inventory quantities
+        items = [
+            {k: v for k, v in item.items() if k not in ("stock", "quantity_available", "reorder_level")}
+            for item in items
+        ]
     return {"items": items, "meta": meta}
 
 
@@ -48,12 +54,31 @@ async def update_product(
     return await crud.update_catalog_product(db, product_id, body)
 
 
-@router.delete("/products/{product_id}", response_model=CatalogProductOut)
-async def delete_product(
+@router.delete("/products/{product_id}/permanent", response_model=CatalogProductOut)
+async def permanently_delete_product(
     product_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(get_current_admin)],
 ):
+    return await crud.hard_delete_catalog_product(db, product_id)
+
+
+@router.post("/products/{product_id}/reactivate", response_model=CatalogProductOut)
+async def reactivate_product(
+    product_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_admin)],
+):
+    return await crud.reactivate_catalog_product(db, product_id)
+
+
+@router.delete("/products/{product_id}", response_model=CatalogProductOut)
+async def deactivate_product(
+    product_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_admin)],
+):
+    """Soft-deactivate (reversible). Kept as DELETE for existing clients."""
     return await crud.soft_delete_catalog_product(db, product_id)
 
 

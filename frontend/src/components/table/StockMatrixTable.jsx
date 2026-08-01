@@ -7,9 +7,30 @@ const COLUMNS = [
   { key: 'pet_220', label: LABEL_PET_220 },
 ]
 
+function DeltaHint({ current, baseline }) {
+  if (baseline == null || current === '' || current == null) {
+    return <span className="w-10 text-left text-xs font-bold text-muted">0</span>
+  }
+  const delta = Number(current) - Number(baseline)
+  if (!Number.isFinite(delta)) {
+    return <span className="w-10 text-left text-xs font-bold text-muted">0</span>
+  }
+  if (delta === 0) {
+    return <span className="w-10 text-left text-xs font-bold text-muted">0</span>
+  }
+  const sign = delta > 0 ? '+' : ''
+  return (
+    <span className={`w-10 text-left text-xs font-bold ${delta > 0 ? 'text-brand-600' : 'text-danger'}`}>
+      {sign}
+      {delta}
+    </span>
+  )
+}
+
 export default function StockMatrixTable({
   rows = [],
   values = {},
+  baselines = {},
   onChange,
   emptyLabel = 'No flavours available',
 }) {
@@ -77,17 +98,21 @@ export default function StockMatrixTable({
                     ? ''
                     : String(values[fieldKey])
                   : String(row[col.key] ?? 0)
+                const baseline = baselines[fieldKey] ?? row[col.key]
                 return (
-                  <td key={col.key} className="border border-brand-100 px-2 py-2 text-center">
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      value={display}
-                      aria-label={`${row.flavour} ${col.label} stock`}
-                      className="mx-auto w-24 rounded-md border border-brand-200 bg-white px-2 py-1.5 text-center text-ink outline-none focus:ring-2 focus:ring-brand-300"
-                      onChange={(e) => handle(fieldKey, e.target.value)}
-                    />
+                  <td key={col.key} className="border border-brand-100 px-2 py-2 align-middle">
+                    <div className="flex items-center justify-center gap-2">
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        value={display}
+                        aria-label={`${row.flavour} ${col.label} stock`}
+                        className="w-24 rounded-md border border-brand-200 bg-white px-2 py-1.5 text-center text-ink outline-none focus:ring-2 focus:ring-brand-300"
+                        onChange={(e) => handle(fieldKey, e.target.value)}
+                      />
+                      <DeltaHint current={display === '' ? null : display} baseline={baseline} />
+                    </div>
                   </td>
                 )
               })}

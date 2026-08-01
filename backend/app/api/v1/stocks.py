@@ -1,5 +1,6 @@
 from typing import Annotated, Optional
 from uuid import UUID
+from datetime import date
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,9 +43,22 @@ async def stock_history(
     _: Annotated[User, Depends(get_current_admin)],
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
 ):
-    items, meta = await crud.list_stock_update_history(db, page, page_size)
+    items, meta = await crud.list_stock_update_history(
+        db, page, page_size, date_from=date_from, date_to=date_to
+    )
     return {"items": items, "meta": meta}
+
+
+@router.get("/low-stock")
+async def low_stock(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_admin)],
+):
+    items = await crud.list_low_stock_items(db)
+    return {"items": items, "count": len(items)}
 
 
 @router.get("")

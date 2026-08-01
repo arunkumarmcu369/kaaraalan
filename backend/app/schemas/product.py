@@ -16,6 +16,7 @@ class CatalogProductCreate(BaseModel):
     size_ml: Optional[int] = None
     price: Decimal = Field(gt=0)
     stock: int = Field(default=0, ge=0)
+    reorder_level: int = Field(default=10, ge=0)
 
     @model_validator(mode="after")
     def validate_size(self):
@@ -33,6 +34,7 @@ class CatalogProductUpdate(BaseModel):
     size_ml: Optional[int] = None
     price: Optional[Decimal] = Field(default=None, gt=0)
     stock: Optional[int] = Field(default=None, ge=0)
+    reorder_level: Optional[int] = Field(default=None, ge=0)
     is_active: Optional[bool] = None
 
     @model_validator(mode="after")
@@ -53,6 +55,7 @@ class CatalogProductOut(BaseModel):
     size_label: str
     price: Decimal
     stock: int
+    reorder_level: int = 0
     sku: str
     is_active: bool
     created_at: Optional[datetime] = None

@@ -1,4 +1,3 @@
-import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { dealerSummary } from '../../api'
@@ -7,31 +6,16 @@ import StatCard from '../../components/common/StatCard'
 import Spinner from '../../components/common/Spinner'
 import OrderStatusBadge from '../../components/common/OrderStatusBadge'
 import Button from '../../components/common/Button'
-import Input from '../../components/common/Input'
 import EmptyState from '../../components/common/EmptyState'
-
-function defaultRange() {
-  const to = new Date()
-  const from = new Date()
-  from.setDate(from.getDate() - 30)
-  return {
-    from: from.toISOString().slice(0, 10),
-    to: to.toISOString().slice(0, 10),
-  }
-}
+import ReportPeriodFilter, { useReportPeriod } from '../../components/common/ReportPeriodFilter'
 
 export default function DealerDashboard() {
-  const defaults = useMemo(() => defaultRange(), [])
-  const [dateFrom, setDateFrom] = useState(defaults.from)
-  const [dateTo, setDateTo] = useState(defaults.to)
+  const period = useReportPeriod('30d')
 
   const { data, isLoading, isFetching, error } = useQuery({
-    queryKey: ['dealer-summary', dateFrom, dateTo],
-    queryFn: () =>
-      dealerSummary({
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-      }),
+    queryKey: ['dealer-summary', period.params],
+    queryFn: () => dealerSummary(period.params),
+    enabled: period.isValid,
   })
 
   return (
@@ -46,22 +30,16 @@ export default function DealerDashboard() {
         }
       />
 
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:max-w-xl">
-        <Input
-          label="From Date"
-          type="date"
-          value={dateFrom}
-          max={dateTo || undefined}
-          onChange={(e) => setDateFrom(e.target.value)}
-        />
-        <Input
-          label="To Date"
-          type="date"
-          value={dateTo}
-          min={dateFrom || undefined}
-          onChange={(e) => setDateTo(e.target.value)}
-        />
-      </div>
+      <ReportPeriodFilter
+        className="mb-5"
+        range={period.range}
+        onRangeChange={period.setRange}
+        dateFrom={period.dateFrom}
+        onDateFromChange={period.setDateFrom}
+        dateTo={period.dateTo}
+        onDateToChange={period.setDateTo}
+        error={!period.isValid ? 'Select a valid custom date range.' : ''}
+      />
 
       {isLoading ? (
         <Spinner />

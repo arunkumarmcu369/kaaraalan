@@ -1,11 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { batchRequired } from '../../api'
 import PageHeader from '../../components/common/PageHeader'
-import Select from '../../components/common/Select'
-import Input from '../../components/common/Input'
 import Spinner from '../../components/common/Spinner'
 import EmptyState from '../../components/common/EmptyState'
+import Select from '../../components/common/Select'
+import OrderStatusBadge from '../../components/common/OrderStatusBadge'
+import ReportPeriodFilter, { useReportPeriod } from '../../components/common/ReportPeriodFilter'
+import { formatDateTime } from '../../utils/formatDate'
+import { formatDealerName } from '../../utils/formatDealerName'
+
+const ALL_ORDERS = ''
 
 function formatBatches(value) {
   return Number(value || 0).toFixed(2)
@@ -35,63 +40,135 @@ function FlavourCard({ flavour, total_crates, batches_required, total_syrup_kg }
   )
 }
 
-export default function AdminBatchRequired() {
-  const [range, setRange] = useState('today')
-  const [selectedDate, setSelectedDate] = useState('')
+function OrderInfo({ order }) {
+  if (!order) return null
+  return (
+    <div className="rounded-2xl bg-white/80 p-5 shadow-sm ring-1 ring-brand-100">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted">Order ID</p>
+          <p className="mt-1 text-sm font-bold text-ink">{order.order_number}</p>
+        </div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted">Dealer Name</p>
+          <p className="mt-1 text-sm font-bold text-ink">{formatDealerName(order.dealer_name)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted">Order Date & Time</p>
+          <p className="mt-1 text-sm font-bold text-ink">{formatDateTime(order.created_at)}</p>
+        </div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted">Total Crates</p>
+          <p className="mt-1 text-sm font-bold tabular-nums text-ink">
+            {Number(order.total_crates || 0).toLocaleString()}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted">Order Status</p>
+          <div className="mt-1">
+            <OrderStatusBadge status={order.status} />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
-  const filterParams = selectedDate ? { date: selectedDate } : { range }
+export default function AdminBatchRequired() {
+  const period = useReportPeriod('today')
+  const periodKey = JSON.stringify(period.params)
+  const [orderId, setOrderId] = useState(ALL_ORDERS)
+  const [orderPeriodKey, setOrderPeriodKey] = useState(periodKey)
+  const effectiveOrderId = orderPeriodKey === periodKey ? orderId : ALL_ORDERS
+
+  const queryParams = useMemo(() => {
+    const params = { ...period.params }
+    if (effectiveOrderId) params.order_id = effectiveOrderId
+    return params
+  }, [period.params, effectiveOrderId])
 
   const batchQ = useQuery({
-    queryKey: ['batch-required', filterParams],
-    queryFn: () => batchRequired(filterParams),
+    queryKey: ['batch-required', queryParams],
+    queryFn: () => batchRequired(queryParams),
+    enabled: period.isValid,
   })
 
   const data = batchQ.data || {}
   const flavours = data.flavours || []
+  const orders = data.orders || []
+  const selectedOrder = data.selected_order || null
+
+  useEffect(() => {
+    if (orderPeriodKey !== periodKey) {
+      setOrderId(ALL_ORDERS)
+      setOrderPeriodKey(periodKey)
+    }
+  }, [periodKey, orderPeriodKey])
+
+  useEffect(() => {
+    if (!effectiveOrderId || !batchQ.data) return
+    const stillPresent = (batchQ.data.orders || []).some((o) => o.id === effectiveOrderId)
+    if (!stillPresent) {
+      setOrderId(ALL_ORDERS)
+      setOrderPeriodKey(periodKey)
+    }
+  }, [batchQ.data, effectiveOrderId, periodKey])
+
+  const orderOptions = useMemo(
+    () => [
+      { value: ALL_ORDERS, label: 'All Approved Orders' },
+      ...orders.map((o) => ({
+        value: o.id,
+        label: `${o.order_number} - ${formatDealerName(o.dealer_name)}`,
+      })),
+    ],
+    [orders]
+  )
+
+  const noOrders = !batchQ.isLoading && !batchQ.error && orders.length === 0
 
   return (
     <div>
       <PageHeader
         title="Batch Required"
         subtitle="Syrup batches needed by flavour from approved orders"
-        actions={
-          <div className="flex flex-wrap items-end gap-2">
-            <Select
-              value={range}
-              onChange={(e) => {
-                setRange(e.target.value)
-                setSelectedDate('')
-              }}
-              options={[
-                { value: 'today', label: 'Today' },
-                { value: '7d', label: 'Last 7 days' },
-                { value: '30d', label: 'Last 30 days' },
-              ]}
-              className="w-40"
-            />
-            <Input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-44"
-              aria-label="Select date"
-            />
-          </div>
-        }
+      />
+      <ReportPeriodFilter
+        className="mb-4"
+        range={period.range}
+        onRangeChange={period.setRange}
+        dateFrom={period.dateFrom}
+        onDateFromChange={period.setDateFrom}
+        dateTo={period.dateTo}
+        onDateToChange={period.setDateTo}
+        error={!period.isValid ? 'Select a valid custom date range.' : ''}
+      />
+      <Select
+        className="mb-5 max-w-md"
+        label="Order"
+        value={effectiveOrderId}
+        onChange={(e) => {
+          setOrderId(e.target.value)
+          setOrderPeriodKey(periodKey)
+        }}
+        options={orderOptions}
+        disabled={!period.isValid || batchQ.isLoading}
       />
 
       {batchQ.isLoading ? (
         <Spinner />
       ) : batchQ.error ? (
         <EmptyState title="Could not load batch data" description="Please try again." />
+      ) : noOrders ? (
+        <EmptyState title="No approved orders found for the selected period." />
       ) : (
         <div className="space-y-5">
+          {selectedOrder && <OrderInfo order={selectedOrder} />}
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {flavours.map((row) => (
               <FlavourCard key={row.flavour} {...row} />
             ))}
           </div>
-
           <div className="rounded-2xl bg-brand-800 px-5 py-5 text-white shadow-sm sm:px-6">
             <div className="grid gap-4 sm:grid-cols-3">
               <div>

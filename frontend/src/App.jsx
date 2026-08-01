@@ -6,15 +6,16 @@ import { ProtectedRoute, RoleBasedRoute } from './routes/ProtectedRoute'
 import AuthLayout from './components/layout/AuthLayout'
 import DashboardLayout from './components/layout/DashboardLayout'
 import Login from './pages/auth/Login'
+import ChangePassword from './pages/auth/ChangePassword'
 import DashboardHome from './pages/DashboardHome'
 import AdminOrders from './pages/admin/Orders'
 import AdminProducts from './pages/admin/Products'
 import AdminDealers from './pages/admin/Dealers'
 import AdminStocks from './pages/admin/Stocks'
-import AdminPrices from './pages/admin/Prices'
 import AdminBatchRequired from './pages/admin/BatchRequired'
+import AdminEmptyCrates from './pages/admin/EmptyCrates'
+import AdminReports from './pages/admin/Reports'
 import DealerStock from './pages/dealer/Stock'
-import DealerCart from './pages/dealer/Cart'
 import DealerOrderHistory from './pages/dealer/OrderHistory'
 
 const queryClient = new QueryClient({
@@ -39,6 +40,8 @@ export default function App() {
             </Route>
 
             <Route element={<ProtectedRoute />}>
+              <Route path="/change-password" element={<ChangePassword />} />
+
               <Route element={<DashboardLayout />}>
                 <Route path="/dashboard" element={<DashboardHome />} />
                 <Route path="/dashboard/orders" element={<OrdersPage />} />
@@ -47,13 +50,13 @@ export default function App() {
                   <Route path="/dashboard/products" element={<AdminProducts />} />
                   <Route path="/dashboard/dealers" element={<AdminDealers />} />
                   <Route path="/dashboard/stocks" element={<AdminStocks />} />
-                  <Route path="/dashboard/prices" element={<AdminPrices />} />
                   <Route path="/dashboard/batch-required" element={<AdminBatchRequired />} />
+                  <Route path="/dashboard/empty-crates" element={<AdminEmptyCrates />} />
+                  <Route path="/dashboard/reports" element={<AdminReports />} />
                 </Route>
 
                 <Route element={<RoleBasedRoute role="dealer" />}>
                   <Route path="/dashboard/stock" element={<DealerStock />} />
-                  <Route path="/dashboard/cart" element={<DealerCart />} />
                 </Route>
               </Route>
             </Route>

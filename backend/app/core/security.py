@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from uuid import UUID
+import base64
+import hashlib
 
+from cryptography.fernet import Fernet, InvalidToken
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -16,6 +19,25 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
+
+
+def _password_fernet() -> Fernet:
+    digest = hashlib.sha256(settings.SECRET_KEY.encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
+def encrypt_password(plain_password: str) -> str:
+    """Store a recoverable copy of dealer passwords for admin display."""
+    return _password_fernet().encrypt(plain_password.encode("utf-8")).decode("utf-8")
+
+
+def decrypt_password(token: Optional[str]) -> Optional[str]:
+    if not token:
+        return None
+    try:
+        return _password_fernet().decrypt(token.encode("utf-8")).decode("utf-8")
+    except (InvalidToken, ValueError):
+        return None
 
 
 def create_access_token(subject: str | UUID, extra: Optional[dict[str, Any]] = None) -> str:

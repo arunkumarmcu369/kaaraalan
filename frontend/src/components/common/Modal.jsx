@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import Button from './Button'
 
-export default function Modal({ open, onClose, title, children, footer, size = 'md' }) {
+export default function Modal({ open, onClose, title, children, footer, size = 'md', onSubmit }) {
   useEffect(() => {
     if (!open) return undefined
     const onKey = (e) => e.key === 'Escape' && onClose?.()
@@ -17,12 +17,23 @@ export default function Modal({ open, onClose, title, children, footer, size = '
 
   const widths = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' }
 
+  const body = (
+    <>
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+      {footer && (
+        <div className="flex flex-wrap justify-end gap-2 border-t border-brand-100 px-5 py-4">
+          {footer}
+        </div>
+      )}
+    </>
+  )
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       <button
         type="button"
         aria-label="Close overlay"
-        className="absolute inset-0 bg-ink/40 backdrop-blur-[2px]"
+        className="interactive-exempt absolute inset-0 cursor-pointer bg-ink/40 backdrop-blur-[2px]"
         onClick={onClose}
       />
       <div
@@ -30,15 +41,22 @@ export default function Modal({ open, onClose, title, children, footer, size = '
       >
         <div className="flex items-center justify-between border-b border-brand-100 px-5 py-4">
           <h3 className="text-lg font-bold text-ink">{title}</h3>
-          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close">
+          <Button variant="ghost" size="sm" type="button" onClick={onClose} aria-label="Close">
             ✕
           </Button>
         </div>
-        <div className="overflow-y-auto px-5 py-4">{children}</div>
-        {footer && (
-          <div className="flex flex-wrap justify-end gap-2 border-t border-brand-100 px-5 py-4">
-            {footer}
-          </div>
+        {onSubmit ? (
+          <form
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            onSubmit={(e) => {
+              e.preventDefault()
+              onSubmit(e)
+            }}
+          >
+            {body}
+          </form>
+        ) : (
+          body
         )}
       </div>
     </div>

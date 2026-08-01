@@ -44,12 +44,17 @@
   font-weight: 600;
   font-size: 0.9375rem;
   padding: 0.9rem 1rem;
+  cursor: pointer;
   box-shadow:
     0 8px 20px rgba(33, 115, 90, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease,
+    filter 180ms ease;
 }
 
 .login-glass-button:hover:not(:disabled) {

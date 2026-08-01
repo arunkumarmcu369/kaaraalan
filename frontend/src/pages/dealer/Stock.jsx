@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { createOrder, dealerStockView } from '../../api'
-import { buildFlavourMatrix } from '../../utils/orderMatrix'
+import { buildFlavourMatrix, resolvePetSize } from '../../utils/orderMatrix'
+import { canonicalFlavour } from '../../constants/flavours'
 import PageHeader from '../../components/common/PageHeader'
 import Button from '../../components/common/Button'
 import Input from '../../components/common/Input'
@@ -15,6 +16,7 @@ import PendingApprovalIllustration from '../../components/common/PendingApproval
 
 export default function DealerStock() {
   const navigate = useNavigate()
+  const location = useLocation()
   const qc = useQueryClient()
   const { data, isLoading, error } = useQuery({
     queryKey: ['dealer-stock'],
@@ -32,6 +34,33 @@ export default function DealerStock() {
     () => rows.some((r) => r.glass || Object.values(r.pets || {}).some(Boolean)),
     [rows]
   )
+
+  useEffect(() => {
+    const reorder = location.state?.reorder
+    if (!reorder || !rows.length) return
+
+    const nextQtys = {}
+    for (const item of reorder.items || []) {
+      const canon = canonicalFlavour(item.name || item.flavour_name)
+      if (!canon) continue
+      const type = item.product_type || (item.bottle_type === 'glass' ? 'glass' : 'pet')
+      const qty = Number(item.quantity || 0)
+      if (!qty) continue
+      if (type === 'glass') {
+        nextQtys[`${canon}::glass`] = qty
+      } else {
+        const size = resolvePetSize(item, item)
+        if (size) nextQtys[`${canon}::pet_${size}`] = qty
+      }
+    }
+    setQtys(nextQtys)
+    setMrp({
+      mrp_glass: reorder.mrp_glass ?? '',
+      mrp_pet_300: reorder.mrp_pet_300 ?? '',
+      mrp_pet_220: reorder.mrp_pet_220 ?? '',
+    })
+    navigate(location.pathname, { replace: true, state: {} })
+  }, [location.state, rows, navigate, location.pathname])
 
   const setQty = (key, value) => {
     setQtys((prev) => {
@@ -111,7 +140,22 @@ export default function DealerStock() {
           description="Ask admin to add GLASS / PET products for the 8 flavours."
         />
       ) : (
-        <div className="space-y-5">
+        <form
+          className="space-y-5"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (submitM.isPending || !dueDate || orderItems.length === 0) return
+            submitM.mutate({
+              due_date: dueDate,
+              items: orderItems,
+              mrp_glass: mrp.mrp_glass === '' || mrp.mrp_glass == null ? null : Number(mrp.mrp_glass),
+              mrp_pet_300:
+                mrp.mrp_pet_300 === '' || mrp.mrp_pet_300 == null ? null : Number(mrp.mrp_pet_300),
+              mrp_pet_220:
+                mrp.mrp_pet_220 === '' || mrp.mrp_pet_220 == null ? null : Number(mrp.mrp_pet_220),
+            })
+          }}
+        >
           <OrderMatrixTable
             rows={rows}
             editable
@@ -141,24 +185,14 @@ export default function DealerStock() {
               </div>
             </div>
             <Button
+              type="submit"
               loading={submitM.isPending}
               disabled={!dueDate || orderItems.length === 0}
-              onClick={() =>
-                submitM.mutate({
-                  due_date: dueDate,
-                  items: orderItems,
-                  mrp_glass: mrp.mrp_glass === '' || mrp.mrp_glass == null ? null : Number(mrp.mrp_glass),
-                  mrp_pet_300:
-                    mrp.mrp_pet_300 === '' || mrp.mrp_pet_300 == null ? null : Number(mrp.mrp_pet_300),
-                  mrp_pet_220:
-                    mrp.mrp_pet_220 === '' || mrp.mrp_pet_220 == null ? null : Number(mrp.mrp_pet_220),
-                })
-              }
             >
               Submit order
             </Button>
           </div>
-        </div>
+        </form>
       )}
 
       <Modal

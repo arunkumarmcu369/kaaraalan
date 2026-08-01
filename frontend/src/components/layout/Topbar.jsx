@@ -1,16 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { listNotifications, markNotificationsRead } from '../../api'
 import Button from '../common/Button'
 import { useAuth } from '../../hooks/useAuth'
+import { formatDealerName } from '../../utils/formatDealerName'
 
 export default function Topbar({ onMenu, liveEvent }) {
-  const { user, logout, isAdmin } = useAuth()
+  const { user, logout, isAdmin, isDealer } = useAuth()
   const [open, setOpen] = useState(false)
   const [notes, setNotes] = useState([])
   const [unread, setUnread] = useState(0)
+  const panelRef = useRef(null)
+  const showBell = isAdmin || isDealer
 
   const load = async () => {
-    if (!isAdmin) return
+    if (!showBell) return
     try {
       const data = await listNotifications({ page_size: 15 })
       setNotes(data.items || [])
@@ -22,16 +25,21 @@ export default function Topbar({ onMenu, liveEvent }) {
 
   useEffect(() => {
     load()
-  }, [isAdmin])
+  }, [showBell, user?.id])
 
   useEffect(() => {
-    if (liveEvent?.type === 'new_order') {
+    if (!liveEvent) return
+    if (liveEvent.type === 'new_order' || liveEvent.type === 'order_updated') {
       setUnread((u) => u + 1)
       setNotes((prev) => [
         {
           id: `live-${Date.now()}`,
-          type: 'new_order',
-          message: liveEvent.message || `New order from ${liveEvent.dealer_name}`,
+          type: liveEvent.type,
+          message:
+            liveEvent.message ||
+            (liveEvent.type === 'new_order'
+              ? `New order from ${formatDealerName(liveEvent.dealer_name)}`
+              : `Order ${liveEvent.order_number} → ${liveEvent.status}`),
           is_read: false,
           created_at: new Date().toISOString(),
         },
@@ -40,9 +48,28 @@ export default function Topbar({ onMenu, liveEvent }) {
     }
   }, [liveEvent])
 
-  const openBell = async () => {
-    setOpen((o) => !o)
-    if (!open && unread > 0) {
+  useEffect(() => {
+    if (!open) return undefined
+    const onPointer = (e) => {
+      if (panelRef.current && !panelRef.current.contains(e.target)) {
+        setOpen(false)
+      }
+    }
+    const onKey = (e) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointer)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointer)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const toggleBell = async () => {
+    const next = !open
+    setOpen(next)
+    if (next && unread > 0) {
       try {
         await markNotificationsRead(null)
         setUnread(0)
@@ -59,14 +86,19 @@ export default function Topbar({ onMenu, liveEvent }) {
         <Button variant="ghost" size="sm" className="lg:hidden" onClick={onMenu} aria-label="Menu">
           ☰
         </Button>
-        <div className="hidden sm:block">
-          <p className="text-sm font-bold text-ink">Welcome, {user?.dealer_name || user?.username}</p>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-ink">
+            Welcome, {formatDealerName(user?.dealer_name) !== '—' ? formatDealerName(user?.dealer_name) : user?.username}
+          </p>
+          <p className="hidden text-[10px] font-semibold uppercase tracking-[0.16em] text-brand-700 sm:block">
+            Kaaraalan Goli Soda
+          </p>
         </div>
       </div>
       <div className="flex items-center gap-2">
-        {isAdmin && (
-          <div className="relative">
-            <Button variant="secondary" size="sm" onClick={openBell} aria-label="Notifications">
+        {showBell && (
+          <div className="relative" ref={panelRef}>
+            <Button variant="secondary" size="sm" onClick={toggleBell} aria-label="Notifications" aria-expanded={open}>
               🔔
               {unread > 0 && (
                 <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-[10px] text-white">

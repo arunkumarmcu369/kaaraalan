@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
-from app.core.security import hash_password
+from app.core.security import hash_password, encrypt_password
 from app.models.dealer import Dealer
 from app.models.notification import Notification
 from app.models.order import Order, OrderItem
@@ -171,15 +171,15 @@ async def seed_flavours(db: AsyncSession) -> None:
 
 # City dealers for testing — username/password match dealer name (lowercase).
 SAMPLE_DEALERS = [
-    {"dealer_name": "Erode", "username": "erode", "password": "erode", "phone": "9876500001"},
-    {"dealer_name": "Coimbatore", "username": "coimbatore", "password": "coimbatore", "phone": "9876500002"},
-    {"dealer_name": "Tiruppur", "username": "tiruppur", "password": "tiruppur", "phone": "9876500003"},
-    {"dealer_name": "Namakkal", "username": "namakkal", "password": "namakkal", "phone": "9876500004"},
-    {"dealer_name": "Ooty", "username": "ooty", "password": "ooty", "phone": "9876500005"},
-    {"dealer_name": "Dindigul", "username": "dindigul", "password": "dindigul", "phone": "9876500006"},
-    {"dealer_name": "Kollimalai", "username": "kollimalai", "password": "kollimalai", "phone": "9876500007"},
-    {"dealer_name": "Karur", "username": "karur", "password": "karur", "phone": "9876500008"},
-    {"dealer_name": "Salem", "username": "salem", "password": "salem", "phone": "9876500009"},
+    {"dealer_name": "ERODE", "username": "erode", "password": "erode", "phone": "9876500001"},
+    {"dealer_name": "COIMBATORE", "username": "coimbatore", "password": "coimbatore", "phone": "9876500002"},
+    {"dealer_name": "TIRUPPUR", "username": "tiruppur", "password": "tiruppur", "phone": "9876500003"},
+    {"dealer_name": "NAMAKKAL", "username": "namakkal", "password": "namakkal", "phone": "9876500004"},
+    {"dealer_name": "OOTY", "username": "ooty", "password": "ooty", "phone": "9876500005"},
+    {"dealer_name": "DINDIGUL", "username": "dindigul", "password": "dindigul", "phone": "9876500006"},
+    {"dealer_name": "KOLLIMALAI", "username": "kollimalai", "password": "kollimalai", "phone": "9876500007"},
+    {"dealer_name": "KARUR", "username": "karur", "password": "karur", "phone": "9876500008"},
+    {"dealer_name": "SALEM", "username": "salem", "password": "salem", "phone": "9876500009"},
 ]
 
 
@@ -211,19 +211,25 @@ async def _delete_dealer_cascade(db: AsyncSession, dealer: Dealer) -> None:
 
 
 async def seed_dealers(db: AsyncSession) -> None:
-    """Replace sample dealers with the fixed city list and login credentials."""
+    """Ensure sample city dealers exist.
+
+    In production (COOKIE_SECURE=true) never delete real dealers — only upsert the sample list.
+    Locally, non-canonical dealers are removed so the demo set stays clean.
+    """
+    from app.core.config import settings
+
     keep_usernames = {d["username"].lower() for d in SAMPLE_DEALERS}
     admin = (
         await db.execute(select(User).where(User.role == "admin").order_by(User.created_at).limit(1))
     ).scalar_one_or_none()
     admin_id = admin.id if admin else None
 
-    # Remove any dealers that are not in the canonical city list
-    result = await db.execute(select(Dealer).options(selectinload(Dealer.user)))
-    for dealer in list(result.scalars().all()):
-        username = (dealer.user.username if dealer.user else "").lower()
-        if username not in keep_usernames:
-            await _delete_dealer_cascade(db, dealer)
+    if not settings.COOKIE_SECURE:
+        result = await db.execute(select(Dealer).options(selectinload(Dealer.user)))
+        for dealer in list(result.scalars().all()):
+            username = (dealer.user.username if dealer.user else "").lower()
+            if username not in keep_usernames:
+                await _delete_dealer_cascade(db, dealer)
 
     for spec in SAMPLE_DEALERS:
         username = spec["username"]
@@ -235,6 +241,7 @@ async def seed_dealers(db: AsyncSession) -> None:
 
         if user:
             user.password_hash = hash_password(spec["password"])
+            user.password_plain = encrypt_password(spec["password"])
             user.role = "dealer"
             user.must_reset_password = False
             user.is_active = True
@@ -264,6 +271,7 @@ async def seed_dealers(db: AsyncSession) -> None:
             id=uuid4(),
             username=username,
             password_hash=hash_password(spec["password"]),
+            password_plain=encrypt_password(spec["password"]),
             role="dealer",
             must_reset_password=False,
             is_active=True,

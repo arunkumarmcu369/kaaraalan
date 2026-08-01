@@ -27,6 +27,45 @@ async def _next_order_seq(db: AsyncSession) -> int:
     return (result or 0) + 1
 
 
+async def _dealer_user_id(db: AsyncSession, dealer_id: UUID) -> Optional[UUID]:
+    dealer = await db.get(Dealer, dealer_id)
+    return dealer.user_id if dealer else None
+
+
+async def _notify_dealer(
+    db: AsyncSession,
+    *,
+    dealer_id: UUID,
+    order: Order,
+    notif_type: str,
+    message: str,
+) -> None:
+    user_id = await _dealer_user_id(db, dealer_id)
+    if not user_id:
+        return
+    notif = Notification(
+        id=uuid4(),
+        type=notif_type,
+        message=message,
+        order_id=order.id,
+        user_id=user_id,
+        is_read=False,
+    )
+    db.add(notif)
+    await db.flush()
+    await ws_manager.send_dealer(
+        user_id,
+        {
+            "type": "order_updated",
+            "order_id": str(order.id),
+            "status": order.status,
+            "order_number": order.order_number,
+            "message": message,
+            "rejection_reason": order.rejection_reason,
+        },
+    )
+
+
 async def create_order(db: AsyncSession, dealer_id: UUID, data: OrderCreate) -> Order:
     if data.due_date < date.today():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Due date cannot be in the past")
@@ -76,12 +115,17 @@ async def create_order(db: AsyncSession, dealer_id: UUID, data: OrderCreate) -> 
         )
 
     dealer = await db.get(Dealer, dealer_id)
+    dealer_label = (dealer.dealer_name if dealer else "dealer").upper()
     total_qty = sum(i.quantity for i in data.items)
     notif = Notification(
         id=uuid4(),
         type="new_order",
-        message=f"New order {order.order_number} from {dealer.dealer_name if dealer else 'dealer'} — {total_qty} bottles",
+        message=(
+            f"New order {order.order_number} from {dealer_label} "
+            f"— {total_qty} crates"
+        ),
         order_id=order.id,
+        user_id=None,
         is_read=False,
     )
     db.add(notif)
@@ -92,7 +136,7 @@ async def create_order(db: AsyncSession, dealer_id: UUID, data: OrderCreate) -> 
             "type": "new_order",
             "order_id": str(order.id),
             "order_number": order.order_number,
-            "dealer_name": dealer.dealer_name if dealer else "",
+            "dealer_name": dealer_label if dealer else "",
             "quantity": total_qty,
             "due_date": str(order.due_date),
             "message": notif.message,
@@ -152,6 +196,36 @@ async def list_orders(
     return list(result.scalars().all()), paginate(total, page, page_size)
 
 
+async def list_orders_for_export(
+    db: AsyncSession,
+    status_filter: Optional[str] = None,
+    dealer_id: Optional[UUID] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+) -> list[Order]:
+    """All orders matching filters (no pagination) for PDF/CSV export."""
+    query = select(Order).options(
+        selectinload(Order.dealer),
+        selectinload(Order.items).selectinload(OrderItem.variant).selectinload(ProductVariant.product),
+    )
+    if status_filter:
+        query = query.where(Order.status == status_filter)
+    if dealer_id:
+        query = query.where(Order.dealer_id == dealer_id)
+    if date_from:
+        query = query.where(
+            Order.created_at
+            >= datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
+        )
+    if date_to:
+        query = query.where(
+            Order.created_at
+            <= datetime.combine(date_to, datetime.max.time()).replace(tzinfo=timezone.utc)
+        )
+    result = await db.execute(query.order_by(Order.created_at.desc()))
+    return list(result.scalars().all())
+
+
 async def list_dealer_orders(
     db: AsyncSession, dealer_id: UUID, page: int = 1, page_size: int = 20
 ) -> tuple[list[Order], dict]:
@@ -159,6 +233,9 @@ async def list_dealer_orders(
 
 
 async def approve_order(db: AsyncSession, order_id: UUID, admin_id: UUID) -> Order:
+    from app.crud import stocks as stocks_crud
+    from app.models.user import User
+
     order = await get_order(db, order_id)
     if order.status != "pending":
         raise HTTPException(status_code=400, detail=f"Order is already {order.status}")
@@ -180,6 +257,9 @@ async def approve_order(db: AsyncSession, order_id: UUID, admin_id: UUID) -> Ord
                     "Update stock or reject the order."
                 ),
             )
+
+    mapping = await stocks_crud._load_flavour_variant_map(db)
+    prev_totals = stocks_crud._totals_from_rows(stocks_crud._matrix_rows_from_map(mapping))
 
     for item in order.items:
         result = await db.execute(
@@ -203,6 +283,19 @@ async def approve_order(db: AsyncSession, order_id: UUID, admin_id: UUID) -> Ord
     order.reviewed_at = datetime.now(timezone.utc)
     await db.flush()
 
+    mapping = await stocks_crud._load_flavour_variant_map(db)
+    new_totals = stocks_crud._totals_from_rows(stocks_crud._matrix_rows_from_map(mapping))
+    admin = await db.get(User, admin_id)
+    if admin:
+        await stocks_crud.record_stock_totals_log(
+            db,
+            admin=admin,
+            prev_totals=prev_totals,
+            new_totals=new_totals,
+            source="system",
+            note=f"Approved Order {order.order_number}",
+        )
+
     await ws_manager.broadcast_admins(
         {
             "type": "order_updated",
@@ -210,6 +303,13 @@ async def approve_order(db: AsyncSession, order_id: UUID, admin_id: UUID) -> Ord
             "status": "approved",
             "order_number": order.order_number,
         }
+    )
+    await _notify_dealer(
+        db,
+        dealer_id=order.dealer_id,
+        order=order,
+        notif_type="order_approved",
+        message=f"Order {order.order_number} was approved",
     )
     return await get_order(db, order.id)
 
@@ -232,6 +332,44 @@ async def reject_order(db: AsyncSession, order_id: UUID, admin_id: UUID, data: O
             "status": "rejected",
             "order_number": order.order_number,
         }
+    )
+    await _notify_dealer(
+        db,
+        dealer_id=order.dealer_id,
+        order=order,
+        notif_type="order_rejected",
+        message=f"Order {order.order_number} was rejected: {data.reason}",
+    )
+    return await get_order(db, order.id)
+
+
+async def fulfill_order(db: AsyncSession, order_id: UUID, admin_id: UUID) -> Order:
+    order = await get_order(db, order_id)
+    if order.status != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only approved orders can be fulfilled (current: {order.status})",
+        )
+
+    order.status = "fulfilled"
+    order.reviewed_by = admin_id
+    order.reviewed_at = datetime.now(timezone.utc)
+    await db.flush()
+
+    await ws_manager.broadcast_admins(
+        {
+            "type": "order_updated",
+            "order_id": str(order.id),
+            "status": "fulfilled",
+            "order_number": order.order_number,
+        }
+    )
+    await _notify_dealer(
+        db,
+        dealer_id=order.dealer_id,
+        order=order,
+        notif_type="order_fulfilled",
+        message=f"Order {order.order_number} was marked fulfilled / dispatched",
     )
     return await get_order(db, order.id)
 

@@ -1,5 +1,6 @@
 from typing import Optional
 from uuid import UUID, uuid4
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -129,10 +130,10 @@ async def update_stock(
 
 
 async def dealer_stock_view(db: AsyncSession) -> list[dict]:
-    """Return flavour groups with glass/pet variants (including zero stock for order matrix)."""
+    """Return flavour groups with glass/pet variants for ordering (no stock quantities)."""
     result = await db.execute(
         select(Product)
-        .options(selectinload(Product.variants).selectinload(ProductVariant.stock))
+        .options(selectinload(Product.variants))
         .where(Product.is_active.is_(True))
         .order_by(Product.flavour_name)
     )
@@ -143,7 +144,6 @@ async def dealer_stock_view(db: AsyncSession) -> list[dict]:
         for v in product.variants:
             if not v.is_active:
                 continue
-            qty = v.stock.quantity_available if v.stock else 0
             variants.append(
                 {
                     "id": v.id,
@@ -156,7 +156,6 @@ async def dealer_stock_view(db: AsyncSession) -> list[dict]:
                     "size_label": _display_size_label(v.bottle_type, v.volume_liters),
                     "sku": v.sku,
                     "price": v.price,
-                    "quantity_available": qty,
                     "flavour_name": product.flavour_name,
                     "name": product.flavour_name,
                 }
@@ -345,6 +344,8 @@ async def bulk_update_stock_matrix(
         new_pet_220_total=new_totals["pet_220"],
         updated_by_id=admin.id,
         updated_by_username=admin.username,
+        source="admin",
+        note=None,
     )
     db.add(log)
     await db.flush()
@@ -352,31 +353,106 @@ async def bulk_update_stock_matrix(
     return await get_stock_matrix(db)
 
 
+async def record_stock_totals_log(
+    db: AsyncSession,
+    *,
+    admin: User,
+    prev_totals: dict,
+    new_totals: dict,
+    source: str,
+    note: Optional[str] = None,
+) -> StockUpdateLog:
+    log = StockUpdateLog(
+        id=uuid4(),
+        previous_glass_total=int(prev_totals.get("glass", 0)),
+        previous_pet_300_total=int(prev_totals.get("pet_300", 0)),
+        previous_pet_220_total=int(prev_totals.get("pet_220", 0)),
+        new_glass_total=int(new_totals.get("glass", 0)),
+        new_pet_300_total=int(new_totals.get("pet_300", 0)),
+        new_pet_220_total=int(new_totals.get("pet_220", 0)),
+        updated_by_id=admin.id,
+        updated_by_username="SYSTEM" if source == "system" else admin.username,
+        source=source,
+        note=note,
+    )
+    db.add(log)
+    await db.flush()
+    return log
+
+
 async def list_stock_update_history(
-    db: AsyncSession, page: int = 1, page_size: int = 25
+    db: AsyncSession,
+    page: int = 1,
+    page_size: int = 25,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ) -> tuple[list[dict], dict]:
-    total = await db.scalar(select(func.count()).select_from(StockUpdateLog)) or 0
+    query = select(StockUpdateLog)
+    count_q = select(func.count()).select_from(StockUpdateLog)
+    if date_from:
+        start = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
+        query = query.where(StockUpdateLog.created_at >= start)
+        count_q = count_q.where(StockUpdateLog.created_at >= start)
+    if date_to:
+        end = datetime.combine(date_to + timedelta(days=1), datetime.min.time()).replace(tzinfo=timezone.utc)
+        query = query.where(StockUpdateLog.created_at < end)
+        count_q = count_q.where(StockUpdateLog.created_at < end)
+
+    total = await db.scalar(count_q) or 0
     result = await db.execute(
-        select(StockUpdateLog)
-        .order_by(StockUpdateLog.created_at.desc())
+        query.order_by(StockUpdateLog.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
-    items = [
-        {
-            "id": log.id,
-            "previous_glass_total": log.previous_glass_total,
-            "previous_pet_300_total": log.previous_pet_300_total,
-            "previous_pet_220_total": log.previous_pet_220_total,
-            "new_glass_total": log.new_glass_total,
-            "new_pet_300_total": log.new_pet_300_total,
-            "new_pet_220_total": log.new_pet_220_total,
-            "updated_by": log.updated_by_username,
-            "created_at": log.created_at,
-        }
-        for log in result.scalars().all()
-    ]
+    items = []
+    for log in result.scalars().all():
+        items.append(
+            {
+                "id": log.id,
+                "previous_glass_total": log.previous_glass_total,
+                "previous_pet_300_total": log.previous_pet_300_total,
+                "previous_pet_220_total": log.previous_pet_220_total,
+                "new_glass_total": log.new_glass_total,
+                "new_pet_300_total": log.new_pet_300_total,
+                "new_pet_220_total": log.new_pet_220_total,
+                "glass_change": log.new_glass_total - log.previous_glass_total,
+                "pet_300_change": log.new_pet_300_total - log.previous_pet_300_total,
+                "pet_220_change": log.new_pet_220_total - log.previous_pet_220_total,
+                "updated_by": log.updated_by_username,
+                "source": getattr(log, "source", None) or "admin",
+                "note": getattr(log, "note", None),
+                "created_at": log.created_at,
+            }
+        )
     return items, paginate(total, page, page_size)
+
+
+async def list_low_stock_items(db: AsyncSession) -> list[dict]:
+    result = await db.execute(
+        select(Stock)
+        .join(ProductVariant)
+        .options(selectinload(Stock.variant).selectinload(ProductVariant.product))
+        .where(ProductVariant.is_active.is_(True))
+        .order_by(ProductVariant.bottle_type)
+    )
+    items = []
+    for stock in result.scalars().all():
+        if stock.quantity_available > stock.reorder_level:
+            continue
+        out = stock_to_out(stock)
+        items.append(
+            {
+                "product_variant_id": out["product_variant_id"],
+                "flavour": out["flavour_name"],
+                "bottle_type": out["product_type"],
+                "size_label": out["size_label"],
+                "current_stock": out["quantity_available"],
+                "threshold": out["reorder_level"],
+                "short_by": max(0, out["reorder_level"] - out["quantity_available"]),
+            }
+        )
+    items.sort(key=lambda r: (r["flavour"].lower(), r["size_label"]))
+    return items
 
 
 def stock_to_out(stock: Stock) -> dict:

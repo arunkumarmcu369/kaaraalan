@@ -2,7 +2,7 @@ import hashlib
 import math
 import re
 import secrets
-import uuid
+import string
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -15,8 +15,11 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def generate_password(length: int = 12) -> str:
-    return secrets.token_urlsafe(length)[:length]
+def generate_password(length: int = 10) -> str:
+    """Secure random password using letters + digits."""
+    alphabet = string.ascii_letters + string.digits
+    length = max(8, min(int(length), 64))
+    return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
 def slugify(text: str) -> str:
@@ -25,15 +28,21 @@ def slugify(text: str) -> str:
     return text.strip("_")[:20] or "dealer"
 
 
+def dealer_username_base(dealer_name: str) -> str:
+    """Lowercase dealer name with spaces/punctuation removed."""
+    base = re.sub(r"[^a-z0-9]", "", (dealer_name or "").lower())
+    return base[:40] or "dealer"
+
+
 async def generate_unique_username(db: AsyncSession, shop_name: str | None, dealer_name: str) -> str:
-    base = slugify(shop_name or dealer_name)
-    for _ in range(20):
-        suffix = secrets.token_hex(2)
-        username = f"{base}_{suffix}"
-        exists = await db.scalar(select(User.id).where(User.username == username))
-        if not exists:
-            return username
-    return f"dealer_{uuid.uuid4().hex[:8]}"
+    """Username from dealer name (no spaces). Append 1, 2, … if taken."""
+    base = dealer_username_base(dealer_name)
+    candidate = base
+    n = 0
+    while await db.scalar(select(User.id).where(User.username == candidate)):
+        n += 1
+        candidate = f"{base}{n}"
+    return candidate
 
 
 def generate_order_number(seq: int, when: datetime | None = None) -> str:

@@ -22,7 +22,8 @@ export default function Login() {
   } = useForm({ resolver: zodResolver(schema) })
 
   useEffect(() => {
-    if (user) navigate('/dashboard', { replace: true })
+    if (!user) return
+    navigate(user.must_reset_password ? '/change-password' : '/dashboard', { replace: true })
   }, [user, navigate])
 
   useEffect(() => {
@@ -35,8 +36,8 @@ export default function Login() {
     setError('')
     clearIdleMessage()
     try {
-      await login(values.username, values.password)
-      navigate('/dashboard', { replace: true })
+      const data = await login(values.username, values.password)
+      navigate(data.must_reset_password ? '/change-password' : '/dashboard', { replace: true })
     } catch (e) {
       setError(e.response?.data?.detail || 'Login failed')
     }

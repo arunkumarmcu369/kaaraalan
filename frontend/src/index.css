@@ -88,3 +88,106 @@ input[type="date"]:disabled {
     background-color: #ffffff;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Shared interactive affordance — one hover style for all clickables         */
+/* -------------------------------------------------------------------------- */
+:root {
+  --interactive-duration: 180ms;
+  --interactive-ease: ease;
+  --interactive-lift: -1px;
+  --interactive-shadow: 0 4px 14px rgba(20, 35, 30, 0.12);
+}
+
+.interactive,
+button:not(:disabled):not(.interactive-exempt),
+a[href]:not(.interactive-exempt),
+[role="button"]:not([aria-disabled="true"]):not(.interactive-exempt),
+select:not(:disabled):not(.interactive-exempt),
+summary:not(.interactive-exempt) {
+  cursor: pointer;
+  transition:
+    background-color var(--interactive-duration) var(--interactive-ease),
+    color var(--interactive-duration) var(--interactive-ease),
+    box-shadow var(--interactive-duration) var(--interactive-ease),
+    transform var(--interactive-duration) var(--interactive-ease),
+    filter var(--interactive-duration) var(--interactive-ease),
+    border-color var(--interactive-duration) var(--interactive-ease),
+    opacity var(--interactive-duration) var(--interactive-ease);
+}
+
+.interactive:hover:not(:disabled),
+.interactive:hover:not([aria-disabled="true"]),
+button:not(:disabled):not(.interactive-exempt):hover,
+a[href]:not(.interactive-exempt):hover,
+[role="button"]:not([aria-disabled="true"]):not(.interactive-exempt):hover,
+select:not(:disabled):not(.interactive-exempt):hover,
+summary:not(.interactive-exempt):hover {
+  transform: translateY(var(--interactive-lift));
+  box-shadow: var(--interactive-shadow);
+  filter: brightness(0.97);
+}
+
+/* Text / link-style controls: colour shift is the primary cue */
+.interactive-text {
+  cursor: pointer;
+  transition:
+    color var(--interactive-duration) var(--interactive-ease),
+    background-color var(--interactive-duration) var(--interactive-ease),
+    box-shadow var(--interactive-duration) var(--interactive-ease),
+    transform var(--interactive-duration) var(--interactive-ease),
+    filter var(--interactive-duration) var(--interactive-ease);
+}
+
+.interactive-text:hover:not(:disabled) {
+  color: var(--color-brand-700);
+  transform: translateY(var(--interactive-lift));
+  box-shadow: var(--interactive-shadow);
+  filter: brightness(0.97);
+}
+
+/* Clickable table / list rows (opt-in via class when the row has an action) */
+.interactive-row {
+  cursor: pointer;
+  transition:
+    background-color var(--interactive-duration) var(--interactive-ease),
+    box-shadow var(--interactive-duration) var(--interactive-ease),
+    transform var(--interactive-duration) var(--interactive-ease),
+    filter var(--interactive-duration) var(--interactive-ease);
+}
+
+.interactive-row:hover {
+  background-color: color-mix(in srgb, var(--color-brand-100) 70%, transparent);
+  filter: brightness(0.98);
+}
+
+/* Card-style rows can lift; native <tr> ignores transform/shadow reliably */
+:not(tr).interactive-row:hover {
+  transform: translateY(var(--interactive-lift));
+  box-shadow: var(--interactive-shadow);
+}
+
+/* Native form controls that open pickers / toggles */
+input[type="date"]:not(:disabled),
+input[type="datetime-local"]:not(:disabled),
+input[type="time"]:not(:disabled),
+input[type="checkbox"]:not(:disabled),
+input[type="radio"]:not(:disabled),
+input[type="file"]:not(:disabled) {
+  cursor: pointer;
+}
+
+/* Explicitly non-interactive chrome: keep pointer if set on the element,
+   but never apply the shared lift / shadow / dimming hover. */
+.interactive-exempt:hover {
+  transform: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+}
+
+button:disabled,
+button[disabled],
+[aria-disabled="true"] {
+  cursor: not-allowed;
+  transform: none !important;
+}

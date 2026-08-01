@@ -55,7 +55,7 @@ export function MrpInputTable({ values = {}, onChange }) {
           </tbody>
         </table>
       </div>
-      <p className="mt-1.5 text-xs text-muted">For bottle label printing only — does not affect order total.</p>
+      <p className="mt-1.5 text-xs text-muted">For crate label printing only — does not affect order total.</p>
     </div>
   )
 }

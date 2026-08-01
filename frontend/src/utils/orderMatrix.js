@@ -11,7 +11,6 @@ function emptyRow(flavour) {
 function cellFromVariant(v) {
   return {
     id: v.id,
-    quantity_available: Number(v.quantity_available ?? 0),
     price: Number(v.price ?? 0),
     size_ml: v.size_ml != null ? Number(v.size_ml) : null,
     size_label: v.size_label || null,
@@ -61,16 +60,13 @@ export function buildFlavourMatrix(groups = []) {
       const cell = cellFromVariant(v)
 
       if (type === 'glass') {
-        if (!row.glass || cell.quantity_available > row.glass.quantity_available) {
-          row.glass = cell
-        }
+        if (!row.glass) row.glass = cell
         continue
       }
 
       const sizeMl = resolvePetSize(v, cell)
       if (sizeMl == null) continue
-      const existing = row.pets[sizeMl]
-      if (!existing || cell.quantity_available > existing.quantity_available) {
+      if (!row.pets[sizeMl]) {
         row.pets[sizeMl] = { ...cell, size_ml: sizeMl, size_label: `${sizeMl} ml` }
       }
     }
@@ -138,7 +134,7 @@ export function matrixTotals(rows, { editable = false, qtys = {} } = {}) {
 
 /**
  * Whether current stock covers every GLASS / PET 300 / PET 220 line on the order.
- * Compares per flavour × bottle type against stock matrix rows.
+ * Compares per flavour × crate type against stock matrix rows.
  */
 export function isOrderStockAvailable(items = [], stockRows = []) {
   const needed = buildOrderMatrix(items)

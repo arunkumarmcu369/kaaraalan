@@ -30,7 +30,7 @@ export default function ResponsiveTable({
             {rows.map((row) => (
               <tr
                 key={row[rowKey]}
-                className={`hover:bg-brand-50/40 ${onRowClick ? 'cursor-pointer' : ''}`}
+                className={onRowClick ? 'interactive-row' : undefined}
                 onClick={() => onRowClick?.(row)}
               >
                 {columns.map((col) => (
@@ -55,7 +55,7 @@ export default function ResponsiveTable({
           <article
             key={row[rowKey]}
             className={`rounded-xl bg-white/90 p-4 shadow-sm ring-1 ring-brand-100 ${
-              onRowClick ? 'cursor-pointer' : ''
+              onRowClick ? 'interactive-row' : ''
             }`}
             onClick={() => onRowClick?.(row)}
           >

@@ -2,7 +2,7 @@ import { formatFlavourLabel } from '../../constants/flavours'
 import { LABEL_GLASS, LABEL_PET_300, LABEL_PET_220 } from '../../constants/labels'
 import { matrixTotals } from '../../utils/orderMatrix'
 
-/** Fully controlled qty input — no stock max; any non-negative integer allowed. */
+/** Fully controlled qty input — any non-negative integer allowed. */
 function QtyInput({ value, ariaLabel, onChange }) {
   const display = value === '' || value === undefined || value === null ? '' : String(value)
 
@@ -34,11 +34,13 @@ function QtyInput({ value, ariaLabel, onChange }) {
 function EditableCell({ available, qtyKey, qtys, onQtyChange, ariaLabel }) {
   if (!available) return <span className="text-muted">—</span>
   return (
-    <QtyInput
-      value={qtys[qtyKey]}
-      ariaLabel={ariaLabel}
-      onChange={(v) => onQtyChange?.(qtyKey, v)}
-    />
+    <div className="flex flex-col items-center gap-0.5">
+      <QtyInput
+        value={qtys[qtyKey]}
+        ariaLabel={ariaLabel}
+        onChange={(v) => onQtyChange?.(qtyKey, v)}
+      />
+    </div>
   )
 }
 

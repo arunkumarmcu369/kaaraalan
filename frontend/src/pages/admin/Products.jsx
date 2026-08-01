@@ -3,7 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { createProduct, deleteProduct, listProducts, updateProduct } from '../../api'
+import {
+  createProduct,
+  deactivateProduct,
+  listProducts,
+  permanentlyDeleteProduct,
+  reactivateProduct,
+  updateProduct,
+} from '../../api'
 import { FLAVOURS, formatFlavourLabel } from '../../constants/flavours'
 import { LABEL_GLASS, LABEL_PET_220, LABEL_PET_300 } from '../../constants/labels'
 import PageHeader from '../../components/common/PageHeader'
@@ -24,6 +31,7 @@ const schema = z
     size_ml: z.coerce.number().optional().nullable(),
     price: z.coerce.number().positive('Price must be greater than 0'),
     stock: z.coerce.number().int().min(0),
+    reorder_level: z.coerce.number().int().min(0),
   })
   .superRefine((data, ctx) => {
     if (data.product_type === 'pet' && ![220, 300].includes(Number(data.size_ml))) {
@@ -31,7 +39,10 @@ const schema = z
     }
   })
 
-const emptyForm = { name: '', product_type: 'glass', size_ml: '', price: '', stock: 0 }
+const emptyForm = { name: '', product_type: 'glass', size_ml: '', price: '', stock: 0, reorder_level: 10 }
+
+const HISTORICAL_DELETE_MSG =
+  'This product has historical records and cannot be deleted. Please deactivate it instead.'
 
 export default function AdminProducts() {
   const qc = useQueryClient()
@@ -39,6 +50,9 @@ export default function AdminProducts() {
   const [pageSize, setPageSize] = useState(25)
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(null)
+  const [deactivateTarget, setDeactivateTarget] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [successMessage, setSuccessMessage] = useState('')
 
   const productsQ = useQuery({
     queryKey: ['products', page, pageSize],
@@ -55,6 +69,24 @@ export default function AdminProducts() {
     if (productType === 'glass') form.setValue('size_ml', null)
   }, [productType, form])
 
+  const invalidateProductQueries = () => {
+    qc.invalidateQueries({ queryKey: ['products'] })
+    qc.invalidateQueries({ queryKey: ['stocks'] })
+    qc.invalidateQueries({ queryKey: ['stock-matrix'] })
+    qc.invalidateQueries({ queryKey: ['admin-summary'] })
+    qc.invalidateQueries({ queryKey: ['low-stock'] })
+  }
+
+  const patchProductActiveInCache = (id, isActive) => {
+    qc.setQueriesData({ queryKey: ['products'] }, (old) => {
+      if (!old?.items) return old
+      return {
+        ...old,
+        items: old.items.map((item) => (item.id === id ? { ...item, is_active: isActive } : item)),
+      }
+    })
+  }
+
   const saveM = useMutation({
     mutationFn: (data) => {
       const payload = {
@@ -63,15 +95,59 @@ export default function AdminProducts() {
         size_ml: data.product_type === 'pet' ? Number(data.size_ml) : null,
         price: Number(data.price),
         stock: Number(data.stock),
+        reorder_level: Number(data.reorder_level),
       }
       return editing ? updateProduct(editing.id, payload) : createProduct(payload)
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['products'] })
-      qc.invalidateQueries({ queryKey: ['stocks'] })
+      invalidateProductQueries()
       closeModal()
     },
     onError: (e) => alert(e.response?.data?.detail || 'Save failed'),
+  })
+
+  const deactivateM = useMutation({
+    mutationFn: (id) => deactivateProduct(id),
+    onSuccess: (_data, id) => {
+      patchProductActiveInCache(id, false)
+      invalidateProductQueries()
+      setDeactivateTarget(null)
+      setSuccessMessage('Product deactivated successfully.')
+    },
+    onError: (e) => alert(e.response?.data?.detail || 'Deactivate failed'),
+  })
+
+  const reactivateM = useMutation({
+    mutationFn: (id) => reactivateProduct(id),
+    onSuccess: (_data, id) => {
+      patchProductActiveInCache(id, true)
+      invalidateProductQueries()
+      setSuccessMessage('Product reactivated successfully.')
+    },
+    onError: (e) => alert(e.response?.data?.detail || 'Reactivate failed'),
+  })
+
+  const deleteM = useMutation({
+    mutationFn: (id) => permanentlyDeleteProduct(id),
+    onSuccess: (_data, id) => {
+      qc.setQueriesData({ queryKey: ['products'] }, (old) => {
+        if (!old?.items) return old
+        return {
+          ...old,
+          items: old.items.filter((item) => item.id !== id),
+          meta: old.meta
+            ? { ...old.meta, total: Math.max(0, (old.meta.total || 1) - 1) }
+            : old.meta,
+        }
+      })
+      invalidateProductQueries()
+      setDeleteTarget(null)
+      setSuccessMessage('Product deleted successfully.')
+    },
+    onError: (e) => {
+      const detail = e.response?.data?.detail
+      alert(typeof detail === 'string' ? detail : HISTORICAL_DELETE_MSG)
+    },
   })
 
   const closeModal = () => {
@@ -94,6 +170,7 @@ export default function AdminProducts() {
       size_ml: row.size_ml || '',
       price: Number(row.price),
       stock: row.stock,
+      reorder_level: Number(row.reorder_level ?? 10),
     })
     setOpen(true)
   }
@@ -129,48 +206,72 @@ export default function AdminProducts() {
         render: (r) => `₹${Number(r.price).toFixed(2)}`,
       },
       {
+        key: 'reorder_level',
+        label: 'Low Stock Level',
+        render: (r) => r.reorder_level ?? 0,
+      },
+      {
+        key: 'is_active',
+        label: 'Status',
+        render: (r) => (
+          <Badge tone={r.is_active ? 'active' : 'inactive'}>{r.is_active ? 'Active' : 'Inactive'}</Badge>
+        ),
+      },
+      {
         key: 'actions',
         label: 'Actions',
         stopRowClick: true,
         render: (r) => (
-          <div className="flex flex-wrap justify-end gap-2 md:justify-start">
+          <div className="flex max-w-[18rem] flex-wrap justify-end gap-2 sm:max-w-none md:justify-start">
             <Button size="sm" variant="secondary" onClick={() => openEdit(r)}>
               Edit
             </Button>
-            <Button
-              size="sm"
-              variant="danger"
-              onClick={() => {
-                if (confirm('Deactivate this product?')) {
-                  deleteProduct(r.id).then(() => qc.invalidateQueries({ queryKey: ['products'] }))
-                }
-              }}
-            >
-              Deactivate
+            {r.is_active ? (
+              <Button size="sm" variant="warn" onClick={() => setDeactivateTarget(r)}>
+                Deactivate
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="primary"
+                loading={reactivateM.isPending && reactivateM.variables === r.id}
+                onClick={() => reactivateM.mutate(r.id)}
+              >
+                Reactivate
+              </Button>
+            )}
+            <Button size="sm" variant="danger" onClick={() => setDeleteTarget(r)}>
+              Delete
             </Button>
           </div>
         ),
       },
     ],
-    [qc]
+    [reactivateM.isPending, reactivateM.variables]
   )
 
   return (
-    <div>
+    <div className="w-full min-w-0">
       <PageHeader
         title="Products"
         subtitle="Manage GLASS and PET products"
-        actions={<Button onClick={openCreate}>Add Product</Button>}
+        actions={
+          <Button className="w-full sm:w-auto" onClick={openCreate}>
+            Add Product
+          </Button>
+        }
       />
       {productsQ.isLoading ? (
         <Spinner />
       ) : (
         <>
-          <ResponsiveTable
-            columns={columns}
-            rows={productsQ.data?.items || []}
-            empty={<EmptyState title="No products yet" description="Add your first product." />}
-          />
+          <div className="min-w-0 overflow-x-auto">
+            <ResponsiveTable
+              columns={columns}
+              rows={productsQ.data?.items || []}
+              empty={<EmptyState title="No products yet" description="Add your first product." />}
+            />
+          </div>
           <Pagination
             page={meta.page}
             pageSize={meta.page_size}
@@ -189,14 +290,19 @@ export default function AdminProducts() {
         open={open}
         onClose={closeModal}
         title={editing ? 'Edit Product' : 'Add Product'}
+        onSubmit={form.handleSubmit((d) => {
+          if (saveM.isPending) return
+          saveM.mutate(d)
+        })}
         footer={
-          <Button loading={saveM.isPending} onClick={form.handleSubmit((d) => saveM.mutate(d))}>
+          <Button type="submit" loading={saveM.isPending}>
             Save
           </Button>
         }
       >
-        <form className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Select
+            className="sm:col-span-2"
             label="Flavour"
             placeholder="Select flavour"
             error={form.formState.errors.name?.message}
@@ -236,7 +342,88 @@ export default function AdminProducts() {
             error={form.formState.errors.stock?.message}
             {...form.register('stock')}
           />
-        </form>
+          <Input
+            className="sm:col-span-2"
+            label="Low Stock Alert Level"
+            type="number"
+            error={form.formState.errors.reorder_level?.message}
+            {...form.register('reorder_level')}
+          />
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!deactivateTarget}
+        onClose={() => !deactivateM.isPending && setDeactivateTarget(null)}
+        title="Deactivate Product?"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              disabled={deactivateM.isPending}
+              onClick={() => setDeactivateTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="warn"
+              loading={deactivateM.isPending}
+              onClick={() => deactivateM.mutate(deactivateTarget.id)}
+            >
+              Deactivate
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted">
+          This will set the product status to Inactive. It will no longer appear in dealer ordering
+          screens or stock calculations. You can keep it for records.
+        </p>
+        {deactivateTarget?.name && (
+          <p className="mt-3 text-sm font-semibold text-ink">
+            {deactivateTarget.name}
+            {deactivateTarget.size_label ? ` · ${deactivateTarget.size_label}` : ''}
+          </p>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => !deleteM.isPending && setDeleteTarget(null)}
+        title="Delete Product?"
+        footer={
+          <>
+            <Button variant="secondary" disabled={deleteM.isPending} onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              loading={deleteM.isPending}
+              onClick={() => deleteM.mutate(deleteTarget.id)}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted">
+          Are you sure you want to permanently delete this product?
+        </p>
+        {deleteTarget?.name && (
+          <p className="mt-3 text-sm font-semibold text-ink">
+            {deleteTarget.name}
+            {deleteTarget.size_label ? ` · ${deleteTarget.size_label}` : ''}
+          </p>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!successMessage}
+        onClose={() => setSuccessMessage('')}
+        title="Success"
+        footer={<Button onClick={() => setSuccessMessage('')}>OK</Button>}
+      >
+        <p className="text-sm text-ink">{successMessage}</p>
       </Modal>
     </div>
   )

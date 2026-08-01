@@ -24,6 +24,7 @@ async def create_dealer(
         "dealer": dealer_out,
         "username": username,
         "password": password,
+        "message": "Please share these credentials with the dealer.",
     }
 
 
@@ -59,10 +60,29 @@ async def update_dealer(
     return crud.dealer_to_out(await crud.update_dealer(db, dealer_id, body))
 
 
-@router.delete("/{dealer_id}", response_model=DealerOut)
+@router.post("/{dealer_id}/deactivate", response_model=DealerOut)
+async def deactivate_dealer(
+    dealer_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_admin)],
+):
+    return crud.dealer_to_out(await crud.deactivate_dealer(db, dealer_id))
+
+
+@router.post("/{dealer_id}/reactivate", response_model=DealerOut)
+async def reactivate_dealer(
+    dealer_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _: Annotated[User, Depends(get_current_admin)],
+):
+    return crud.dealer_to_out(await crud.reactivate_dealer(db, dealer_id))
+
+
+@router.delete("/{dealer_id}")
 async def delete_dealer(
     dealer_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
     _: Annotated[User, Depends(get_current_admin)],
 ):
-    return crud.dealer_to_out(await crud.soft_delete_dealer(db, dealer_id))
+    await crud.hard_delete_dealer(db, dealer_id)
+    return {"message": "Dealer deleted", "id": str(dealer_id)}

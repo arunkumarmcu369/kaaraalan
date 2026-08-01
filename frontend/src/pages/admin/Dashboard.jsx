@@ -44,7 +44,7 @@ export default function AdminDashboard() {
     <div>
       <PageHeader
         title="Dashboard"
-        subtitle="Simplifying Goli Soda operations every day."
+        subtitle="Simplifying Goli Soda operations every day"
         actions={
           <div className="flex flex-wrap items-end gap-2">
             <Select

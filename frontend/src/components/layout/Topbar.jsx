@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { listNotifications, markNotificationsRead } from '../../api'
 import Button from '../common/Button'
 import { useAuth } from '../../hooks/useAuth'
 import { formatDealerName } from '../../utils/formatDealerName'
 
 export default function Topbar({ onMenu, liveEvent }) {
+  const navigate = useNavigate()
   const { user, logout, isAdmin, isDealer } = useAuth()
   const [open, setOpen] = useState(false)
   const [notes, setNotes] = useState([])
@@ -126,7 +128,14 @@ export default function Topbar({ onMenu, liveEvent }) {
             )}
           </div>
         )}
-        <Button variant="ghost" size="sm" onClick={() => logout()}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={async () => {
+            await logout()
+            navigate('/', { replace: true })
+          }}
+        >
           Logout
         </Button>
       </div>

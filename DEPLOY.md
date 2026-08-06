@@ -158,6 +158,17 @@ Options:
 - [ ] WebSocket notifications work (wss)
 - [ ] Admin password changed from seed default
 
+### WhatsApp (optional)
+
+See **[WHATSAPP.md](./WHATSAPP.md)** for full setup.
+
+- [ ] Railway: `WHATSAPP_*` variables set, `WHATSAPP_ENABLED=true`
+- [ ] Meta webhook Callback URL: `https://api.kaaraalan.in/api/v1/whatsapp/webhook`
+- [ ] Meta Verify token matches `WHATSAPP_VERIFY_TOKEN`
+- [ ] Utility templates approved (`order_received`, `order_approved`, `order_rejected`, `order_dispatched`)
+- [ ] Meta payment method added (for business-initiated templates)
+- [ ] Dealer phones stored as valid Indian mobiles
+
 ### If login fails (CORS / cookies)
 
 - `FRONTEND_ORIGIN` must be exactly `https://kaaraalan.in` (no trailing slash)

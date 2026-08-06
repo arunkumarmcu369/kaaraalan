@@ -5,6 +5,11 @@ import { useAuth } from './hooks/useAuth'
 import { ProtectedRoute, RoleBasedRoute } from './routes/ProtectedRoute'
 import AuthLayout from './components/layout/AuthLayout'
 import DashboardLayout from './components/layout/DashboardLayout'
+import Landing from './pages/Landing'
+import OrderOnlineLayout from './pages/OrderOnlineLayout'
+import OrderOnline from './pages/OrderOnline'
+import OrderOnlineCart from './pages/OrderOnlineCart'
+import OrderOnlineCheckout from './pages/OrderOnlineCheckout'
 import Login from './pages/auth/Login'
 import ChangePassword from './pages/auth/ChangePassword'
 import DashboardHome from './pages/DashboardHome'
@@ -35,6 +40,13 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/order-online" element={<OrderOnlineLayout />}>
+              <Route index element={<OrderOnline />} />
+              <Route path="cart" element={<OrderOnlineCart />} />
+              <Route path="checkout" element={<OrderOnlineCheckout />} />
+            </Route>
+
             <Route element={<AuthLayout />}>
               <Route path="/login" element={<Login />} />
             </Route>
@@ -61,8 +73,7 @@ export default function App() {
               </Route>
             </Route>
 
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

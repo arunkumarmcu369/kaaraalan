@@ -143,7 +143,11 @@ async def create_order(db: AsyncSession, dealer_id: UUID, data: OrderCreate) -> 
         }
     )
 
-    return await get_order(db, order.id)
+    loaded = await get_order(db, order.id)
+    from app.services.whatsapp_notify import notify_order_placed
+
+    await notify_order_placed(loaded)
+    return loaded
 
 
 async def get_order(db: AsyncSession, order_id: UUID) -> Order:
@@ -311,7 +315,11 @@ async def approve_order(db: AsyncSession, order_id: UUID, admin_id: UUID) -> Ord
         notif_type="order_approved",
         message=f"Order {order.order_number} was approved",
     )
-    return await get_order(db, order.id)
+    loaded = await get_order(db, order.id)
+    from app.services.whatsapp_notify import notify_order_approved
+
+    await notify_order_approved(loaded)
+    return loaded
 
 
 async def reject_order(db: AsyncSession, order_id: UUID, admin_id: UUID, data: OrderReject) -> Order:
@@ -340,7 +348,11 @@ async def reject_order(db: AsyncSession, order_id: UUID, admin_id: UUID, data: O
         notif_type="order_rejected",
         message=f"Order {order.order_number} was rejected: {data.reason}",
     )
-    return await get_order(db, order.id)
+    loaded = await get_order(db, order.id)
+    from app.services.whatsapp_notify import notify_order_rejected
+
+    await notify_order_rejected(loaded)
+    return loaded
 
 
 async def fulfill_order(db: AsyncSession, order_id: UUID, admin_id: UUID) -> Order:
@@ -371,7 +383,11 @@ async def fulfill_order(db: AsyncSession, order_id: UUID, admin_id: UUID) -> Ord
         notif_type="order_fulfilled",
         message=f"Order {order.order_number} was marked fulfilled / dispatched",
     )
-    return await get_order(db, order.id)
+    loaded = await get_order(db, order.id)
+    from app.services.whatsapp_notify import notify_order_dispatched
+
+    await notify_order_dispatched(loaded)
+    return loaded
 
 
 def order_to_out(order: Order) -> dict:

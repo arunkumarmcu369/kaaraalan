@@ -7,7 +7,7 @@ export function ProtectedRoute() {
   const location = useLocation()
 
   if (loading) return <Spinner label="Checking session…" />
-  if (!user) return <Navigate to="/login" replace state={{ from: location }} />
+  if (!user) return <Navigate to="/" replace state={{ from: location }} />
   if (user.must_reset_password && location.pathname !== '/change-password') {
     return <Navigate to="/change-password" replace />
   }
@@ -20,7 +20,7 @@ export function ProtectedRoute() {
 export function RoleBasedRoute({ role }) {
   const { user, loading } = useAuth()
   if (loading) return <Spinner />
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) return <Navigate to="/" replace />
   if (user.must_reset_password) return <Navigate to="/change-password" replace />
   if (user.role !== role) return <Navigate to="/dashboard" replace />
   return <Outlet />

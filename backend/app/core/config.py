@@ -33,6 +33,24 @@ class Settings(BaseSettings):
     ACCESS_COOKIE_NAME: str = "access_token"
     REFRESH_COOKIE_NAME: str = "refresh_token"
 
+    # WhatsApp Cloud API (Meta) — set in Railway for production
+    WHATSAPP_ENABLED: bool = False
+    WHATSAPP_TOKEN: str = ""
+    WHATSAPP_PHONE_NUMBER_ID: str = ""
+    WHATSAPP_WABA_ID: str = ""
+    WHATSAPP_API_VERSION: str = "v21.0"
+    WHATSAPP_VERIFY_TOKEN: str = "kaaraalan_wa_verify_2026"
+    WHATSAPP_APP_SECRET: str = ""
+    WHATSAPP_ADMIN_PHONE: str = ""
+    # Prefer approved templates for business-initiated messages
+    WHATSAPP_USE_TEMPLATES: bool = True
+    WHATSAPP_ALLOW_TEXT_FALLBACK: bool = True
+    WHATSAPP_TEMPLATE_LANG: str = "en"
+    WHATSAPP_TEMPLATE_ORDER_PLACED: str = "order_received"
+    WHATSAPP_TEMPLATE_ORDER_APPROVED: str = "order_approved"
+    WHATSAPP_TEMPLATE_ORDER_REJECTED: str = "order_rejected"
+    WHATSAPP_TEMPLATE_ORDER_DISPATCHED: str = "order_dispatched"
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def normalize_db_url(cls, value: str) -> str:

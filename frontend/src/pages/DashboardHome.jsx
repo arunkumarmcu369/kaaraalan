@@ -7,6 +7,6 @@ import Spinner from '../components/common/Spinner'
 export default function DashboardHome() {
   const { user, loading, isAdmin } = useAuth()
   if (loading) return <Spinner />
-  if (!user) return <Navigate to="/login" replace />
+  if (!user) return <Navigate to="/" replace />
   return isAdmin ? <AdminDashboard /> : <DealerDashboard />
 }

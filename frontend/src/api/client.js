@@ -30,8 +30,8 @@ api.interceptors.response.use(
       await refreshPromise
       return api(original)
     } catch {
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login?reason=session'
+      if (!window.location.pathname.includes('/login') && window.location.pathname !== '/') {
+        window.location.href = '/'
       }
       throw error
     }
